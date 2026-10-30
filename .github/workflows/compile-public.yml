@@ -201,7 +201,8 @@ jobs:
           fi
           : > "$WORK/lifted_boot_functions.c"
           declare -A SEEN_BOOT_TU
-          for VA in 00EC408C 00EC8E14 00ED5BAE 00EE11E9 00EE13A3 00EC5EC0 00EDD92C 00EDDB9A; do
+          for VA in 00EC408C 00EC8E14 00ED5BAE 00EE11E9 00EE13A3 00EC5EC0 00EDD92C 00EDDB9A \
+                   00A61AD0 00A61590 00A64900 00A5E8A0 0044F560 00879550 00404FFE 006FF60E 00401050 00406D30; do
             B=$(grep -rln -F "void sub_${VA}(void)" "$WORK/gen" --include="*.c" 2>/dev/null | head -1 || true)
             echo "definicao sub_${VA}: ${B:-NAO ENCONTRADA}"
             if [ -n "$B" ] && [ -z "${SEEN_BOOT_TU[$B]+x}" ]; then
