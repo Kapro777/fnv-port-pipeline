@@ -1,0 +1,227 @@
+name: compile M2
+# Pipeline publico: engine DesertDroid lift + compila o jogo + smoke boot M3.
+# O jogo NAO vive aqui (BYOG): FalloutNV.exe vem de release PRIVADA de
+# Kapro777/fnv-build-inputs via secret FNV_PAT. Nada do jogo vai publico:
+# boot.log, C liftado e simbolos sao uploadados numa release privada.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/compile-public.yml'
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      PCRECOMP: ${{ github.workspace }}/external/pcrecomp
+      WORK: ${{ github.workspace }}/work
+      EXE: ${{ github.workspace }}/FalloutNV.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencias
+        run: |
+          mkdir -p "$WORK"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build build-essential ccache gdb libvorbis-dev libogg-dev pkg-config > /dev/null
+          pip install -q capstone pefile
+          ccache --set-config=max_size=8.0G
+
+      - name: Cache ccache (o C gerado e deterministico)
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/ccache
+          key: ccache-v3-${{ github.run_id }}
+          restore-keys: ccache-v3
+
+      - name: Exec privado (BYOG, nunca publicado)
+        run: |
+          gh release download v0-bootstrap -R Kapro777/fnv-build-inputs \
+            -p 'FalloutNV.exe' --clobber
+          ls -lh FalloutNV.exe
+          sha256sum FalloutNV.exe | head -c 16
+          echo ' (prefixo do sha256; hash completo confere em repositorio privado)'
+        env:
+          GH_TOKEN: ${{ secrets.FNV_PAT }}
+
+      - name: Tooling DesertDroid + pcrecomp pinned
+        run: |
+          git clone -q https://github.com/Kapro777/DesertDroid.git tooling
+          git clone -q https://github.com/sp00nznet/pcrecomp.git external/pcrecomp
+          cd external/pcrecomp
+          git checkout -q 35548b8
+          git config user.name ci
+          git config user.email ci@localhost
+          git apply "$GITHUB_WORKSPACE/tooling/patches/pcrecomp/pcrecomp_changes.patch"
+          git log --oneline -1
+
+      - name: Cache pipeline (C gerado e catalogo, por hash do exe+tooling)
+        id: gencache
+        uses: actions/cache@v4
+        with:
+          path: |
+            work/gen
+            work/catalog.json
+            work/*_seeds.json
+            work/seeds_all.json
+            work/names.json
+            work/m0_report.txt
+          key: gen-v1-${{ hashFiles('FalloutNV.exe') }}-${{ hashFiles('tooling/tools/run_lift.py', 'tooling/tools/merge_seeds.py', 'tooling/config/overrides.txt', 'tooling/patches/pcrecomp/*.patch') }}
+
+      - name: Seeds (vtable + RTTI)
+        if: steps.gencache.outputs.cache-hit != 'true'
+        run: |
+          cd "$PCRECOMP"
+          python3 tools/cpp/vtable_scan.py "$EXE" --seeds "$WORK/vtable_seeds.json"
+          python3 tools/cpp/rtti.py "$EXE" --seeds "$WORK/rtti_seeds.json" --names "$WORK/names.json"
+          python3 "$GITHUB_WORKSPACE/tooling/tools/merge_seeds.py" "$EXE" "$WORK/seeds_all.json" \
+            "$WORK/vtable_seeds.json" "$WORK/rtti_seeds.json"
+
+      - name: Catalogo (recursive descent)
+        if: steps.gencache.outputs.cache-hit != 'true'
+        run: |
+          python3 "$GITHUB_WORKSPACE/tooling/tools/run_lift.py" catalog "$EXE" \
+            "$WORK/seeds_all.json" "$WORK/catalog.json"
+
+      - name: Lift (x86-32 -> C)
+        if: steps.gencache.outputs.cache-hit != 'true'
+        run: |
+          python3 "$GITHUB_WORKSPACE/tooling/tools/run_lift.py" lift "$EXE" \
+            "$WORK/catalog.json" "$WORK/gen" --names "$WORK/names.json" --split 300
+
+      - name: Relatorio M0/M1
+        if: steps.gencache.outputs.cache-hit != 'true'
+        run: |
+          python3 "$GITHUB_WORKSPACE/tooling/tools/m0_report.py" "$WORK" | tee "$WORK/m0_report.txt"
+
+      - name: Diagnostico do catalogo (fronteiras reais das funcoes)
+        run: |
+          python3 - <<'EOF' | tee "$WORK/catalog_lookup.txt"
+          import json, bisect
+          cat = json.load(open("work/catalog.json"))
+          funcs = sorted((f["address"], f["end"]) for f in cat["functions"])
+          starts = [a for a, e in funcs]
+          targets = {
+              0xEDCF9C: "cookie (meu palpite)",
+              0xEDCFD1: "site do GetSystemTimeAsFileTime",
+              0xECB75D: "scrt_seh (meu palpite)",
+              0xECB8DB: "restart path",
+              0x869C50: "WINMAIN (xref do CRT)",
+              0xECB86B: "call site do WinMain",
+              0xECC4DB: "entry adulterado",
+          }
+          for t, why in targets.items():
+              i = bisect.bisect_right(starts, t) - 1
+              if i >= 0 and funcs[i][0] <= t < funcs[i][1]:
+                  print(f"VA {t:#010x} ({why}) -> funcao sub_{funcs[i][0]:08X} .. {funcs[i][1]:#x} (tam {funcs[i][1]-funcs[i][0]})")
+              else:
+                  print(f"VA {t:#010x} ({why}) -> FORA de qualquer funcao catalogada")
+          with open("work/dispatch_vas.txt", "w") as f:
+              for a, e in funcs:
+                  f.write(f"{a:08X} {e:08X}\n")
+          print("dispatch_vas.txt escrito com", len(funcs), "funcoes")
+          EOF
+
+      - name: Overrides (scrt real + WinMain, fora das fronteiras do catalogo)
+        run: |
+          python3 "$GITHUB_WORKSPACE/tooling/tools/lift_override.py" "$EXE" \
+            "$WORK/catalog.json" "$WORK/names.json" "$WORK/gen" \
+            0xECB75D:0xECBA8E 0x869C50:0x86A800
+
+      - name: Build M2 (compila o jogo recompilado)
+        run: |
+          cmake -S "$GITHUB_WORKSPACE/tooling" -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DPCRECOMP="$PCRECOMP" -DGEN_DIR="$WORK/gen"
+          if ! cmake --build build -j"$(nproc)" 2> >(tee "$WORK/build_errors.log" >&2); then
+            echo "::error::compilacao falhou — primeiros erros:"
+            head -60 "$WORK/build_errors.log"
+            exit 1
+          fi
+          echo "BUILD OK: $(ls -lh build/DesertDroid | awk '{print $5}')"
+
+      - name: Dump de simbolos (symbolizacao de backtrace)
+        run: |
+          cd build
+          nm -n DesertDroid 2>/dev/null | gzip > "$WORK/symbols.txt.gz" || true
+          zcat "$WORK/symbols.txt.gz" | wc -l
+
+      - name: Smoke boot M3 (sob GDB — diagnostico do boot/CRT)
+        run: |
+          cd build
+          timeout 400 gdb -batch -nx \
+            -ex 'set confirm off' \
+            -ex 'handle SIGSEGV stop noprint nopass' \
+            -ex 'handle SIGABRT stop noprint nopass' \
+            -ex run \
+            -ex 'printf "\n=== GDB: ESTADO FINAL DO PROCESSO ===\n"' \
+            -ex 'printf "si_addr: "' \
+            -ex 'p/x $_siginfo._sifields._sigfault.si_addr' \
+            -ex 'printf "pc: "' \
+            -ex 'p/x $pc' \
+            -ex 'info registers' \
+            -ex 'printf "\n=== disas ao redor do fault ===\n"' \
+            -ex 'x/30i $pc-48' \
+            -ex 'printf "\n=== stack do fault ===\n"' \
+            -ex 'x/16xg $rsp' \
+            -ex 'printf "\n=== backtrace ===\n"' \
+            -ex 'bt 24' \
+            --args ./DesertDroid "$EXE" 2>&1 | tee "$WORK/boot.log" || true
+          echo "=== fim do smoke boot (exit/timeout previsto no bring-up) ==="
+
+      - name: Extrai C liftado das funcoes do crash
+        run: |
+          F=$(grep -rln "sub_00AA35A0" "$WORK/gen" --include="*.c" 2>/dev/null | head -1 || true)
+          echo "arquivo com sub_00AA35A0: $F"
+          if [ -n "$F" ]; then
+            gzip -c "$F" > "$WORK/lifted_crash_src.c.gz"
+          fi
+          : > "$WORK/lifted_boot_functions.c"
+          declare -A SEEN_BOOT_TU
+          for VA in 00EC408C 00EC8E14 00ED5BAE 00EE11E9 00EE13A3 00EC5EC0 00EDD92C 00EDDB9A; do
+            B=$(grep -rln -F "void sub_${VA}(void)" "$WORK/gen" --include="*.c" 2>/dev/null | head -1 || true)
+            echo "definicao sub_${VA}: ${B:-NAO ENCONTRADA}"
+            if [ -n "$B" ] && [ -z "${SEEN_BOOT_TU[$B]+x}" ]; then
+              cat "$B" >> "$WORK/lifted_boot_functions.c"
+              SEEN_BOOT_TU["$B"]=1
+            fi
+          done
+          if [ -s "$WORK/lifted_boot_functions.c" ]; then
+            gzip -c "$WORK/lifted_boot_functions.c" > "$WORK/lifted_boot_src.c.gz"
+          fi
+
+      # ---- Logs do DOE sao PRIVADOS: sobem como release privada no fnv-build-inputs ----
+      - name: Upload privado (boot.log, C liftado, simbolos)
+        run: |
+          TAG="logs-${{ github.run_id }}"
+          gh release create "$TAG" -R Kapro777/fnv-build-inputs \
+            --title "diagnosticos run ${{ github.run_id }} (publico->privado)" \
+            --notes "boot.log + C liftado + simbolos do run ${{ github.run_id }}" \
+            "$WORK/boot.log" \
+            "$WORK/symbols.txt.gz" \
+            "$WORK/lifted_crash_src.c.gz" \
+            "$WORK/lifted_boot_src.c.gz" \
+            "work/lift_stats.json" 2>&1 || {
+              echo 'release ja existe? fazendo upload de addendum'
+              gh release upload "$TAG" -R Kapro777/fnv-build-inputs \
+                "$WORK/boot.log" "$WORK/symbols.txt.gz" || true
+            }
+        env:
+          GH_TOKEN: ${{ secrets.FNV_PAT }}
+
+      # ---- Publico: so estatisticas de pipeline, sem codigo do jogo ----
+      - name: Artefatos publicos (estatisticas sem codigo do jogo)
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-report-public
+          path: |
+            work/m0_report.txt
+            work/catalog_lookup.txt
+            work/build_errors.log
+          if-no-files-found: warn
