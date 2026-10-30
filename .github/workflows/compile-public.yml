@@ -41,9 +41,26 @@ jobs:
 
       - name: Exec privado (BYOG, nunca publicado)
         run: |
-          gh release download v0-bootstrap -R Kapro777/fnv-build-inputs \
-            -p 'FalloutNV.exe' --clobber
-          ls -lh FalloutNV.exe
+          mkdir -p Data
+          # A release privada v0-bootstrap carrega o BYOG completo: exe + dados
+          # essenciais (esm, ini default). Baixa o que existir — asset ausente
+          # nao falha o passo (a release cresce aos poucos, BYOG).
+          have() { gh release view v0-bootstrap -R Kapro777/fnv-build-inputs --json assets -q '.assets[].name' | grep -qx "$1"; }
+          for a in FalloutNV.exe FalloutNV.esm Fallout_default.ini low.ini medium.ini high.ini VeryHigh.ini \
+                   "Fallout - Meshes.bsa" "Fallout - Textures.bsa" "Fallout - Textures2.bsa" \
+                   "Fallout - Sound.bsa" "Fallout - Voices1.bsa" "Fallout - Misc.bsa" Update.bsa; do
+            if have "$a"; then
+              gh release download v0-bootstrap -R Kapro777/fnv-build-inputs -p "$a" --clobber
+              echo "ok: $a"
+            else
+              echo "ausente (skip): $a"
+            fi
+          done
+          # esm/bsa ficam em Data\ (o dd_fs mapeia C:\FalloutNV\Data -> ./Data)
+          for f in *.bsa FalloutNV.esm; do
+            [ -f "$f" ] && mv -f "$f" Data/
+          done
+          ls -lh FalloutNV.exe Data/ 2>/dev/null | head -20
           sha256sum FalloutNV.exe | head -c 16
           echo ' (prefixo do sha256; hash completo confere em repositorio privado)'
         env:
