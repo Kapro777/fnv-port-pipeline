@@ -200,18 +200,25 @@ jobs:
       - name: Upload privado (boot.log, C liftado, simbolos)
         run: |
           TAG="logs-${{ github.run_id }}"
+          # Cria a release SEM assets (sempre existe), depois sobe cada
+          # arquivo que existir: um arquivo ausente (ex.: lift_stats.json
+          # em run de cache-miss) NAO pode engolir o boot.log de novo
+          # (run 40983424557: 'no matches found' derrubou a release toda).
           gh release create "$TAG" -R Kapro777/fnv-build-inputs \
             --title "diagnosticos run ${{ github.run_id }} (publico->privado)" \
-            --notes "boot.log + C liftado + simbolos do run ${{ github.run_id }}" \
-            "$WORK/boot.log" \
-            "$WORK/symbols.txt.gz" \
-            "$WORK/lifted_crash_src.c.gz" \
-            "$WORK/lifted_boot_src.c.gz" \
-            "work/lift_stats.json" 2>&1 || {
-              echo 'release ja existe? fazendo upload de addendum'
-              gh release upload "$TAG" -R Kapro777/fnv-build-inputs \
-                "$WORK/boot.log" "$WORK/symbols.txt.gz" || true
-            }
+            --notes "boot.log + C liftado + simbolos do run ${{ github.run_id }}" 2>&1 || true
+          for f in "$WORK/boot.log" "$WORK/symbols.txt.gz" \
+                   "$WORK/lifted_crash_src.c.gz" "$WORK/lifted_boot_src.c.gz" \
+                   work/lift_stats.json; do
+            if [ -f "$f" ]; then
+              gh release upload "$TAG" -R Kapro777/fnv-build-inputs "$f" --clobber 2>&1 | tail -1
+            else
+              echo "ausente (skip): $f"
+            fi
+          done
+          echo '=== assets da release privada: ==='
+          gh release view "$TAG" -R Kapro777/fnv-build-inputs --json assets \
+            -q '.assets[].name' 2>&1 || true
         env:
           GH_TOKEN: ${{ secrets.FNV_PAT }}
 
