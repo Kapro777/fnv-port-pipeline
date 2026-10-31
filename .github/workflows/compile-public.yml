@@ -163,6 +163,14 @@ jobs:
           fi
           echo "BUILD OK: $(ls -lh build/DesertDroid | awk '{print $5}')"
 
+      - name: Difftest (lift32 vs unicorn — quality gate do lifter)
+        run: |
+          pip install -q unicorn
+          python3 "$GITHUB_WORKSPACE/tooling/tools/difftest32.py" "$EXE" "$WORK/difftest" 3 \
+            2>&1 | tee "$WORK/difftest.log" || true
+          echo "=== primeiros 40 do relatorio de diferencas ==="
+          head -40 "$WORK/difftest/report.txt" 2>/dev/null || true
+
       - name: Dump de simbolos (symbolizacao de backtrace)
         run: |
           cd build
@@ -249,4 +257,6 @@ jobs:
             work/m0_report.txt
             work/catalog_lookup.txt
             work/build_errors.log
+            work/difftest.log
+            work/difftest/report.txt
           if-no-files-found: warn
