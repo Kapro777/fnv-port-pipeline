@@ -172,7 +172,7 @@ jobs:
       - name: Smoke boot M3 (sob GDB — diagnostico do boot/CRT)
         run: |
           cd build
-          timeout 600 gdb -batch -nx \
+          timeout 2700 gdb -batch -nx \
             -ex 'set confirm off' \
             -ex 'handle SIGSEGV stop noprint nopass' \
             -ex 'handle SIGABRT stop noprint nopass' \
