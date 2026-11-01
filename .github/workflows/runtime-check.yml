@@ -28,8 +28,8 @@ jobs:
           printf '#include <unistd.h>\nint main(void) { for (;;) pause(); }\n' > wait.c
           gcc -g wait.c -o wait
           set +e
-          timeout --preserve-status --signal=INT --kill-after=10s 3s \
-            gdb -batch -nx -ex 'handle SIGINT stop print nopass' -ex run \
+          DD_BOOT_SECONDS=3 timeout --kill-after=5s 20s \
+            gdb -batch -nx -ex 'source tooling/tools/gdb_deadline.py' -ex run \
             -ex 'thread apply all bt 32' --args ./wait > capture.txt 2>&1
           set -e
           cat capture.txt
