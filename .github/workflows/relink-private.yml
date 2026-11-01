@@ -31,6 +31,7 @@ jobs:
            # bridge D3D9 e os overrides CRT; reativa-los abaixo.
            find tooling external -type f -exec touch -t 197001010000 {} +
            touch tooling/src/host/dd_d3d9.c
+           touch tooling/src/host/dd_runtime.c
            touch tooling/src/host/dd_crt_override.c
            touch tooling/src/host/dd_stubs_boot.c
            touch external/pcrecomp/runtime/win32hle/guest_mem.c
