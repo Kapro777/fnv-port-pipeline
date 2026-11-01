@@ -1,0 +1,36 @@
+name: runtime checks (synthetic)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/runtime-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch public tooling
+        run: |
+          git clone -q https://github.com/Kapro777/DesertDroid.git tooling
+          git clone -q https://github.com/sp00nznet/pcrecomp.git pcrecomp
+          git -C pcrecomp checkout -q 35548b8
+          git -C pcrecomp apply "$PWD/tooling/patches/pcrecomp/pcrecomp_changes.patch"
+      - name: Python syntax
+        run: python3 -m py_compile tooling/tools/difftest32.py
+      - name: Call ABI regression
+        run: |
+          gcc -O2 -I pcrecomp/runtime/recomp32 tooling/tools/check_call_abi.c -lm -o check-call
+          ./check-call
+      - name: Validate timed debugger capture
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb
+          printf '#include <unistd.h>\nint main(void) { for (;;) pause(); }\n' > wait.c
+          gcc -g wait.c -o wait
+          set +e
+          timeout --preserve-status --signal=INT --kill-after=10s 3s \
+            gdb -batch -nx -ex 'handle SIGINT stop print nopass' -ex run \
+            -ex 'thread apply all bt 32' --args ./wait > capture.txt 2>&1
+          set -e
+          cat capture.txt
+          grep -q 'main.*wait.c' capture.txt
