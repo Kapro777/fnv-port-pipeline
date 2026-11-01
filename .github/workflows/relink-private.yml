@@ -43,9 +43,13 @@ jobs:
             -ex 'handle SIGSEGV stop print nopass' \
             -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
             -ex run -ex 'thread apply all bt 32' -ex 'thread 1' \
-            -ex 'p/x g_cur_func' -ex 'p/x g_eax' -ex 'p/x g_ecx' -ex 'p/x g_esp' \
-            -ex 'p/x g_ebp' -ex 'p/x g_esi' -ex 'p/x g_edi' -ex 'p/x g_icall_count' \
-            -ex 'p/x g_backedges' -ex 'info registers' -ex 'x/30i $pc-48' -ex 'bt 24' \
+            -ex 'p/x (unsigned int)g_cur_func' -ex 'p/x (unsigned int)g_eax' \
+            -ex 'p/x (unsigned int)g_ecx' -ex 'p/x (unsigned int)g_edx' \
+            -ex 'p/x (unsigned int)g_ebx' -ex 'p/x (unsigned int)g_esp' \
+            -ex 'p/x (unsigned int)g_ebp' -ex 'p/x (unsigned int)g_esi' \
+            -ex 'p/x (unsigned int)g_edi' -ex 'p/x (unsigned int)g_icall_count' \
+            -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
+            -ex 'x/30i $pc-48' -ex 'bt 24' \
             --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" > relink-boot.log 2>&1
           echo "gdb_exit=$?" > relink-status.txt
       - name: Publica somente na release privada
