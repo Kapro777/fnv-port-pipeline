@@ -42,7 +42,10 @@ jobs:
             -ex 'set confirm off' \
             -ex 'handle SIGSEGV stop print nopass' \
             -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
-            -ex run -ex 'info registers' -ex 'thread apply all bt 32' \
+            -ex run -ex 'thread apply all bt 32' -ex 'thread 1' \
+            -ex 'p/x g_cur_func' -ex 'p/x g_eax' -ex 'p/x g_ecx' -ex 'p/x g_esp' \
+            -ex 'p/x g_ebp' -ex 'p/x g_esi' -ex 'p/x g_edi' -ex 'p/x g_icall_count' \
+            -ex 'p/x g_backedges' -ex 'info registers' -ex 'x/30i $pc-48' -ex 'bt 24' \
             --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" > relink-boot.log 2>&1
           echo "gdb_exit=$?" > relink-status.txt
       - name: Publica somente na release privada

@@ -202,8 +202,14 @@ jobs:
             -ex 'x/30i $pc-48' \
             -ex 'printf "\n=== stack do fault ===\n"' \
             -ex 'x/16xg $rsp' \
-            -ex 'printf "\n=== backtrace ===\n"' \
+             -ex 'printf "\n=== backtrace ===\n"' \
              -ex 'thread apply all bt 32' \
+             -ex 'thread 1' \
+             -ex 'printf "\n=== guest state (machine owner) ===\n"' \
+             -ex 'p/x g_cur_func' -ex 'p/x g_eax' -ex 'p/x g_ecx' -ex 'p/x g_edx' \
+             -ex 'p/x g_ebx' -ex 'p/x g_esp' -ex 'p/x g_ebp' -ex 'p/x g_esi' -ex 'p/x g_edi' \
+             -ex 'p/x g_icall_count' -ex 'p/x g_backedges' \
+             -ex 'info registers' -ex 'x/30i $pc-48' -ex 'bt 24' \
              --args ./DesertDroid "$EXE" > "$WORK/boot.log" 2>&1
           status=$?
           echo "gdb_exit=$status" > "$WORK/boot_status.txt"
