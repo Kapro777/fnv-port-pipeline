@@ -1,0 +1,54 @@
+name: relink private existing build
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Run ID whose private release contains build-state.tar.zst
+        required: true
+        type: string
+jobs:
+  relink:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.FNV_PAT }}
+      BUILD_RUN: ${{ inputs.build_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias e fontes publicas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build build-essential gdb zstd libvorbis-dev libogg-dev pkg-config > /dev/null
+          git clone -q https://github.com/Kapro777/DesertDroid.git tooling
+          git clone -q https://github.com/sp00nznet/pcrecomp.git external/pcrecomp
+          git -C external/pcrecomp checkout -q 35548b8
+          git -C external/pcrecomp apply tooling/patches/pcrecomp/pcrecomp_changes.patch
+      - name: Recupera estado privado do build
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          gh release download "logs-$BUILD_RUN" -R Kapro777/fnv-build-inputs \
+            -p build-state.tar.zst -D "$RUNNER_TEMP"
+          tar -C "$GITHUB_WORKSPACE" --zstd -xf "$RUNNER_TEMP/build-state.tar.zst"
+      - name: Relink incremental
+        run: |
+          cmake --build build -j"$(nproc)" > relink.log 2>&1
+      - name: Diagnostico curto privado
+        if: always()
+        run: |
+          set +e
+          timeout --kill-after=30s 240s gdb -batch -nx \
+            -ex 'set confirm off' \
+            -ex 'handle SIGSEGV stop print nopass' \
+            -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
+            -ex run -ex 'info registers' -ex 'thread apply all bt 32' \
+            --args ./build/DesertDroid > relink-boot.log 2>&1
+          echo "gdb_exit=$?" > relink-status.txt
+      - name: Publica somente na release privada
+        if: always()
+        run: |
+          TAG="relink-${{ github.run_id }}"
+          gh release create "$TAG" -R Kapro777/fnv-build-inputs \
+            --title "Relink incremental" --notes "Build de origem: $BUILD_RUN"
+          for f in relink.log relink-boot.log relink-status.txt; do
+            if [ -f "$f" ]; then gh release upload "$TAG" -R Kapro777/fnv-build-inputs "$f"; fi
+          done
