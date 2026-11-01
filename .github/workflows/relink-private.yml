@@ -27,10 +27,11 @@ jobs:
           # O estado restaurado traz os .o com os timestamps originais, mas
           # clones novos recebem todas as fontes com mtime atual. Sem esta
           # normalizacao, o Ninja recompila as ~400 TUs publicas e o relink
-          # deixa de ser incremental. O unico TU alterado nesta rodada e o
-          # bridge D3D9; reativa-lo explicitamente abaixo.
-          find tooling external -type f -exec touch -t 197001010000 {} +
-          touch tooling/src/host/dd_d3d9.c
+           # deixa de ser incremental. Os TUs alterados nesta rodada sao a
+           # bridge D3D9 e os overrides CRT; reativa-los abaixo.
+           find tooling external -type f -exec touch -t 197001010000 {} +
+           touch tooling/src/host/dd_d3d9.c
+           touch tooling/src/host/dd_crt_override.c
       - name: Recupera estado privado do build
         run: |
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
