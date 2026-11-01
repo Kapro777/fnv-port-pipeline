@@ -64,20 +64,7 @@ jobs:
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
             -ex 'x/30i $pc-48' -ex 'bt 24' \
             --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" 2>&1 |
-            python3 -c 'import sys
-limit = 64 * 1024 * 1024
-written = 0
-while True:
-    chunk = sys.stdin.buffer.read(65536)
-    if not chunk:
-        break
-    if written < limit:
-        part = chunk[:limit - written]
-        sys.stdout.buffer.write(part)
-        written += len(part)
-if written >= limit:
-    sys.stdout.buffer.write(b"\n[DesertDroid] diagnostico truncado em 64 MiB\n")
-'
+            python3 "$GITHUB_WORKSPACE/tools/cap_stream.py" relink-boot.log 67108864
           gdb_status=${PIPESTATUS[0]}
           echo "gdb_exit=$gdb_status" > relink-status.txt
       - name: Publica somente na release privada
