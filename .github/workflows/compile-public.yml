@@ -151,6 +151,16 @@ jobs:
           fi
           echo "BUILD OK: $(ls -lh build/DesertDroid | awk '{print $5}')"
 
+      - name: Guarda build privado para diagnosticos sem recompilar
+        run: |
+          TAG="logs-${{ github.run_id }}"
+          gzip -c build/DesertDroid > "$WORK/DesertDroid.gz"
+          gh release view "$TAG" -R Kapro777/fnv-build-inputs > /dev/null 2>&1 || \
+            gh release create "$TAG" -R Kapro777/fnv-build-inputs --title "diagnosticos run ${{ github.run_id }}" --notes "Build e diagnosticos privados"
+          gh release upload "$TAG" -R Kapro777/fnv-build-inputs "$WORK/DesertDroid.gz" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.FNV_PAT }}
+
       - name: Difftest experimental (ainda nao valida o lifter)
         continue-on-error: true
         run: |

@@ -1,0 +1,61 @@
+name: diagnose existing private build
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Run ID whose private release contains DesertDroid.gz
+        required: true
+        type: string
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.FNV_PAT }}
+      BUILD_RUN: ${{ inputs.build_run }}
+    steps:
+      - name: Dependencias e tooling publico
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb libvorbis-dev libogg-dev > /dev/null
+          git clone -q https://github.com/Kapro777/DesertDroid.git tooling
+      - name: Recupera build e dados privados
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          mkdir -p work/Data
+          cd work
+          gh release download "logs-$BUILD_RUN" -R Kapro777/fnv-build-inputs -p DesertDroid.gz
+          gzip -d DesertDroid.gz
+          chmod +x DesertDroid
+          gh release download v0-bootstrap -R Kapro777/fnv-build-inputs -p FalloutNV.exe
+          gh release view v0-bootstrap -R Kapro777/fnv-build-inputs --json assets -q '.assets[].name' > assets.txt
+          while IFS= read -r asset; do
+            case "$asset" in
+              *.bsa|*.esm|*.ini)
+                gh release download v0-bootstrap -R Kapro777/fnv-build-inputs -p "$asset"
+                name="${asset//.\-./ - }"
+                if [ "$name" != "$asset" ]; then mv -- "$asset" "$name"; fi
+                case "$name" in *.bsa|*.esm) mv -- "$name" Data/ ;; esac
+                ;;
+            esac
+          done < assets.txt
+      - name: Captura curta de todas as threads
+        run: |
+          cd work
+          set +e
+          timeout --kill-after=30s 240s gdb -batch -nx \
+            -ex 'set confirm off' \
+            -ex 'handle SIGSEGV stop print nopass' \
+            -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
+            -ex run -ex 'info registers' -ex 'thread apply all bt 32' \
+            --args ./DesertDroid "$PWD/FalloutNV.exe" > boot.log 2>&1
+          echo "gdb_exit=$?" > status.txt
+      - name: Publica diagnosticos somente na release privada
+        if: always()
+        run: |
+          TAG="diagnose-${{ github.run_id }}"
+          gh release create "$TAG" -R Kapro777/fnv-build-inputs \
+            --title "Diagnostico sem rebuild" --notes "Build de origem: $BUILD_RUN"
+          for f in work/boot.log work/status.txt; do
+            if [ -f "$f" ]; then gh release upload "$TAG" -R Kapro777/fnv-build-inputs "$f"; fi
+          done
