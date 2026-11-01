@@ -47,6 +47,10 @@ jobs:
         if: always()
         run: |
           set +e
+          set -o pipefail
+          # O processo pode entrar em um loop de boot e produzir gigabytes
+          # de trace. Consome toda a saída para não fechar o pipe do GDB,
+          # mas conserva somente os primeiros 64 MiB para a release privada.
           timeout --kill-after=30s 240s gdb -batch -nx \
             -ex 'set confirm off' \
             -ex 'handle SIGSEGV stop print nopass' \
@@ -59,8 +63,23 @@ jobs:
             -ex 'p/x (unsigned int)g_edi' -ex 'p/x (unsigned int)g_icall_count' \
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
             -ex 'x/30i $pc-48' -ex 'bt 24' \
-            --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" > relink-boot.log 2>&1
-          echo "gdb_exit=$?" > relink-status.txt
+            --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" 2>&1 |
+            python3 -c 'import sys
+limit = 64 * 1024 * 1024
+written = 0
+while True:
+    chunk = sys.stdin.buffer.read(65536)
+    if not chunk:
+        break
+    if written < limit:
+        part = chunk[:limit - written]
+        sys.stdout.buffer.write(part)
+        written += len(part)
+if written >= limit:
+    sys.stdout.buffer.write(b"\n[DesertDroid] diagnostico truncado em 64 MiB\n")
+'
+          gdb_status=${PIPESTATUS[0]}
+          echo "gdb_exit=$gdb_status" > relink-status.txt
       - name: Publica somente na release privada
         if: always()
         run: |
