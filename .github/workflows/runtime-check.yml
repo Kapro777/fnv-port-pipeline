@@ -21,7 +21,13 @@ jobs:
         run: |
           gcc -O2 -I pcrecomp/runtime/recomp32 tooling/tools/check_call_abi.c -lm -o check-call
           ./check-call
-      - name: Validate timed debugger capture
+      - name: Validate context snapshot isolation
+        run: |
+          gcc -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \
+            -I pcrecomp/runtime/recomp32 -I pcrecomp/runtime/win32hle \
+            tooling/tools/check_context.c -lm -lpthread -o check-context
+          ./check-context
+      - name: Validate timed debugger backtrace
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq gdb
