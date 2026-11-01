@@ -19,9 +19,6 @@ jobs:
         run: python3 -m py_compile tooling/tools/difftest32.py
       - name: D3D9 COM bridge syntax and vtable ABI
         run: |
-          git clone -q https://github.com/sp00nznet/pcrecomp.git pcrecomp
-          git -C pcrecomp checkout -q 35548b8
-          git -C pcrecomp apply "$PWD/tooling/patches/pcrecomp/pcrecomp_changes.patch"
           gcc -std=gnu11 -fsyntax-only \
             -I pcrecomp/runtime/recomp32 -I pcrecomp/runtime/win32hle \
             tooling/src/host/dd_d3d9.c
