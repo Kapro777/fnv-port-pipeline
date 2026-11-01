@@ -24,6 +24,13 @@ jobs:
           git clone -q https://github.com/sp00nznet/pcrecomp.git external/pcrecomp
           git -C external/pcrecomp checkout -q 35548b8
           git -C external/pcrecomp apply "$GITHUB_WORKSPACE/tooling/patches/pcrecomp/pcrecomp_changes.patch"
+          # O estado restaurado traz os .o com os timestamps originais, mas
+          # clones novos recebem todas as fontes com mtime atual. Sem esta
+          # normalizacao, o Ninja recompila as ~400 TUs publicas e o relink
+          # deixa de ser incremental. O unico TU alterado nesta rodada e o
+          # bridge D3D9; reativa-lo explicitamente abaixo.
+          find tooling external -type f -exec touch -t 197001010000 {} +
+          touch tooling/src/host/dd_d3d9.c
       - name: Recupera estado privado do build
         run: |
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
