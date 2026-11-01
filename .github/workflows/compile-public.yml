@@ -78,6 +78,12 @@ jobs:
           python3 -m py_compile tooling/tools/difftest32.py
           printf '#include "recomp_types.h"\n' | gcc -x c -fsyntax-only \
             -I "$PCRECOMP/runtime/recomp32" -
+          gcc -O2 -I "$PCRECOMP/runtime/recomp32" tooling/tools/check_call_abi.c -lm -o "$WORK/check-call"
+          "$WORK/check-call"
+          gcc -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \
+            -I "$PCRECOMP/runtime/recomp32" -I "$PCRECOMP/runtime/win32hle" \
+            tooling/tools/check_context.c -lm -lpthread -o "$WORK/check-context"
+          "$WORK/check-context"
 
       - name: Seeds (vtable + RTTI)
         run: |
