@@ -32,13 +32,6 @@ jobs:
           pip install -q capstone pefile
           ccache --set-config=max_size=8.0G
 
-      - name: Cache ccache (o C gerado e deterministico)
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/.cache/ccache
-          key: ccache-v3-${{ github.run_id }}
-          restore-keys: ccache-v3
-
       - name: Exec privado (BYOG, nunca publicado)
         run: |
           mkdir -p Data
@@ -49,8 +42,11 @@ jobs:
           for a in FalloutNV.exe FalloutNV.esm Fallout_default.ini low.ini medium.ini high.ini VeryHigh.ini \
                    "Fallout - Meshes.bsa" "Fallout - Textures.bsa" "Fallout - Textures2.bsa" \
                    "Fallout - Sound.bsa" "Fallout - Voices1.bsa" "Fallout - Misc.bsa" Update.bsa; do
-            if have "$a"; then
-              gh release download v0-bootstrap -R Kapro777/fnv-build-inputs -p "$a" --clobber
+            remote="$a"
+            if ! have "$remote"; then remote="${a// /.}"; fi
+            if have "$remote"; then
+              gh release download v0-bootstrap -R Kapro777/fnv-build-inputs -p "$remote" --clobber
+              if [ "$remote" != "$a" ]; then mv -- "$remote" "$a"; fi
               echo "ok: $a"
             else
               echo "ausente (skip): $a"
@@ -77,22 +73,15 @@ jobs:
           git apply "$GITHUB_WORKSPACE/tooling/patches/pcrecomp/pcrecomp_changes.patch"
           git log --oneline -1
 
-      - name: Cache pipeline (C gerado e catalogo, por hash do exe+tooling)
-        id: gencache
-        uses: actions/cache@v4
-        with:
-          path: |
-            work/gen
-            work/catalog.json
-            work/*_seeds.json
-            work/seeds_all.json
-            work/names.json
-            work/m0_report.txt
-          key: gen-v1-${{ hashFiles('FalloutNV.exe') }}-${{ hashFiles('tooling/tools/run_lift.py', 'tooling/tools/merge_seeds.py', 'tooling/config/overrides.txt', 'tooling/patches/pcrecomp/*.patch') }}
+      - name: Sintaxe do tooling (antes do lift)
+        run: |
+          python3 -m py_compile tooling/tools/difftest32.py
+          printf '#include "recomp_types.h"\n' | gcc -x c -fsyntax-only \
+            -I "$PCRECOMP/runtime/recomp32" -
 
       - name: Seeds (vtable + RTTI)
-        if: steps.gencache.outputs.cache-hit != 'true'
         run: |
+          exec > "$WORK/seeds.log" 2>&1
           cd "$PCRECOMP"
           python3 tools/cpp/vtable_scan.py "$EXE" --seeds "$WORK/vtable_seeds.json"
           python3 tools/cpp/rtti.py "$EXE" --seeds "$WORK/rtti_seeds.json" --names "$WORK/names.json"
@@ -100,25 +89,24 @@ jobs:
             "$WORK/vtable_seeds.json" "$WORK/rtti_seeds.json"
 
       - name: Catalogo (recursive descent)
-        if: steps.gencache.outputs.cache-hit != 'true'
         run: |
+          exec > "$WORK/catalog.log" 2>&1
           python3 "$GITHUB_WORKSPACE/tooling/tools/run_lift.py" catalog "$EXE" \
             "$WORK/seeds_all.json" "$WORK/catalog.json"
 
       - name: Lift (x86-32 -> C)
-        if: steps.gencache.outputs.cache-hit != 'true'
         run: |
+          exec > "$WORK/lift.log" 2>&1
           python3 "$GITHUB_WORKSPACE/tooling/tools/run_lift.py" lift "$EXE" \
             "$WORK/catalog.json" "$WORK/gen" --names "$WORK/names.json" --split 300
 
       - name: Relatorio M0/M1
-        if: steps.gencache.outputs.cache-hit != 'true'
         run: |
           python3 "$GITHUB_WORKSPACE/tooling/tools/m0_report.py" "$WORK" | tee "$WORK/m0_report.txt"
 
       - name: Diagnostico do catalogo (fronteiras reais das funcoes)
         run: |
-          python3 - <<'EOF' | tee "$WORK/catalog_lookup.txt"
+          python3 - <<'EOF' > "$WORK/catalog_lookup.txt" 2>&1
           import json, bisect
           cat = json.load(open("work/catalog.json"))
           funcs = sorted((f["address"], f["end"]) for f in cat["functions"])
@@ -146,6 +134,7 @@ jobs:
 
       - name: Overrides (scrt real + WinMain, fora das fronteiras do catalogo)
         run: |
+          exec > "$WORK/overrides.log" 2>&1
           python3 "$GITHUB_WORKSPACE/tooling/tools/lift_override.py" "$EXE" \
             "$WORK/catalog.json" "$WORK/names.json" "$WORK/gen" \
             0xECB75D:0xECBA8E 0x869C50:0x86A800
@@ -156,20 +145,18 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DPCRECOMP="$PCRECOMP" -DGEN_DIR="$WORK/gen"
-          if ! cmake --build build -j"$(nproc)" 2> >(tee "$WORK/build_errors.log" >&2); then
-            echo "::error::compilacao falhou — primeiros erros:"
-            head -60 "$WORK/build_errors.log"
+          if ! cmake --build build -j"$(nproc)" > "$WORK/build_errors.log" 2>&1; then
+            echo "::error::compilacao falhou; diagnostico na release privada"
             exit 1
           fi
           echo "BUILD OK: $(ls -lh build/DesertDroid | awk '{print $5}')"
 
-      - name: Difftest (lift32 vs unicorn — quality gate do lifter)
+      - name: Difftest experimental (ainda nao valida o lifter)
+        continue-on-error: true
         run: |
           pip install -q unicorn
           python3 "$GITHUB_WORKSPACE/tooling/tools/difftest32.py" "$EXE" "$WORK/difftest" 3 \
-            2>&1 | tee "$WORK/difftest.log" || true
-          echo "=== primeiros 40 do relatorio de diferencas ==="
-          head -40 "$WORK/difftest/report.txt" 2>/dev/null || true
+            > "$WORK/difftest.log" 2>&1
 
       - name: Dump de simbolos (symbolizacao de backtrace)
         run: |
@@ -180,10 +167,12 @@ jobs:
       - name: Smoke boot M3 (sob GDB — diagnostico do boot/CRT)
         run: |
           cd build
-          timeout 2700 gdb -batch -nx \
+          set +e
+          timeout --preserve-status --signal=INT --kill-after=30s 180s gdb -batch -nx \
             -ex 'set confirm off' \
             -ex 'handle SIGSEGV stop noprint nopass' \
-            -ex 'handle SIGABRT stop noprint nopass' \
+             -ex 'handle SIGABRT stop noprint nopass' \
+             -ex 'handle SIGINT stop print nopass' \
             -ex run \
             -ex 'printf "\n=== GDB: ESTADO FINAL DO PROCESSO ===\n"' \
             -ex 'printf "si_addr: "' \
@@ -196,9 +185,11 @@ jobs:
             -ex 'printf "\n=== stack do fault ===\n"' \
             -ex 'x/16xg $rsp' \
             -ex 'printf "\n=== backtrace ===\n"' \
-            -ex 'bt 24' \
-            --args ./DesertDroid "$EXE" 2>&1 | tee "$WORK/boot.log" || true
-          echo "=== fim do smoke boot (exit/timeout previsto no bring-up) ==="
+             -ex 'thread apply all bt 32' \
+             --args ./DesertDroid "$EXE" > "$WORK/boot.log" 2>&1
+          status=$?
+          echo "gdb_exit=$status" > "$WORK/boot_status.txt"
+          echo "Captura diagnostica encerrada (status $status); nao comprova boot completo."
 
       - name: Extrai C liftado das funcoes do crash
         run: |
@@ -224,6 +215,7 @@ jobs:
 
       # ---- Logs do DOE sao PRIVADOS: sobem como release privada no fnv-build-inputs ----
       - name: Upload privado (boot.log, C liftado, simbolos)
+        if: always()
         run: |
           TAG="logs-${{ github.run_id }}"
           # Cria a release SEM assets (sempre existe), depois sobe cada
@@ -233,7 +225,7 @@ jobs:
           gh release create "$TAG" -R Kapro777/fnv-build-inputs \
             --title "diagnosticos run ${{ github.run_id }} (publico->privado)" \
             --notes "boot.log + C liftado + simbolos do run ${{ github.run_id }}" 2>&1 || true
-          for f in "$WORK/boot.log" "$WORK/symbols.txt.gz" \
+          for f in "$WORK/"*.log "$WORK/boot_status.txt" "$WORK/catalog_lookup.txt" "$WORK/difftest/report.txt" "$WORK/symbols.txt.gz" \
                    "$WORK/lifted_crash_src.c.gz" "$WORK/lifted_boot_src.c.gz" \
                    work/lift_stats.json; do
             if [ -f "$f" ]; then
@@ -255,8 +247,4 @@ jobs:
           name: m2-report-public
           path: |
             work/m0_report.txt
-            work/catalog_lookup.txt
-            work/build_errors.log
-            work/difftest.log
-            work/difftest/report.txt
           if-no-files-found: warn
