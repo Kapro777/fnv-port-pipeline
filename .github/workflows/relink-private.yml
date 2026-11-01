@@ -18,7 +18,8 @@ jobs:
       - name: Dependencias e fontes publicas
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake ninja-build build-essential gdb zstd libvorbis-dev libogg-dev pkg-config > /dev/null
+           sudo apt-get install -y -qq cmake ninja-build build-essential ccache gdb zstd libvorbis-dev libogg-dev pkg-config > /dev/null
+           ccache --set-config=max_size=8.0G
           git clone -q https://github.com/Kapro777/DesertDroid.git tooling
           git clone -q https://github.com/sp00nznet/pcrecomp.git external/pcrecomp
           git -C external/pcrecomp checkout -q 35548b8
