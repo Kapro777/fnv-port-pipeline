@@ -45,6 +45,21 @@ jobs:
           tar -C "$GITHUB_WORKSPACE" --zstd -xf "$RUNNER_TEMP/build-state.tar.zst"
           gh release download v0-bootstrap -R Kapro777/fnv-build-inputs \
             -p FalloutNV.exe -D "$GITHUB_WORKSPACE"
+      - name: Corrige contratos dos wrappers gerados antigos
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          old = "if (_f) { _f(); return; }"
+          new = "if (_f) { _f(); g_esp += 4u; return; }"
+          changed = []
+          for path in Path("work/gen").glob("recomp_*.c"):
+              text = path.read_text()
+              if old in text:
+                  path.write_text(text.replace(old, new))
+                  changed.append(str(path))
+          print("wrappers corrigidos:", ", ".join(changed))
+          PY
       - name: Relink incremental
         run: |
           cmake --build build -j"$(nproc)" > relink.log 2>&1
