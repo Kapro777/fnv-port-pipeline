@@ -90,6 +90,8 @@ jobs:
             -ex 'p/f g_st[0]' -ex 'p/f g_st[1]' -ex 'p/f g_st[2]' \
             -ex 'p/f g_st[3]' -ex 'p/f g_st[4]' -ex 'p/f g_st[5]' \
             -ex 'x/32wx (unsigned int)g_esi' \
+            -ex 'x/32wx (unsigned int)g_edi' \
+            -ex 'x/32wx (unsigned int)g_ebp' \
             -ex 'x/32wx 0x5149a360' \
             -ex 'x/24wx ((unsigned int)g_esp - 0x20)' \
             -ex 'p/x *(unsigned int*)0x126fd98' \
