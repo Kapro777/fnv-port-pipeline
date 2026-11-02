@@ -85,7 +85,16 @@ jobs:
             -ex 'x/4wx (unsigned long)g_fs_base+0x2c' \
             -ex 'x/4wx 0x50421330' \
             -ex 'x/4wx 0x50421050' \
-            -ex 'x/24wx (unsigned long)g_esp-0x20' \
+            -ex 'info line *$pc' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x34)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x3c)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x40)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x44)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x48)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax+0x34)' \
+            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax+0x38)' \
+            -ex 'x/24wx ((unsigned int)g_esp - 0x20)' \
             -ex 'p/x *(unsigned int*)0x126fd98' \
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
             -ex 'x/30i $pc-48' -ex 'bt 24' \
