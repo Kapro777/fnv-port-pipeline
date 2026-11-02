@@ -73,9 +73,15 @@ jobs:
           # mas conserva somente os primeiros 64 MiB para a release privada.
           timeout --kill-after=30s 240s gdb -batch -nx \
             -ex 'set confirm off' \
-            -ex 'handle SIGSEGV stop print nopass' \
-            -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
-            -ex run -ex 'thread apply all bt 32' -ex 'thread 1' \
+             -ex 'handle SIGSEGV stop print nopass' \
+             -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
+             -ex 'break *sub_00E68EF0+6724' \
+             -ex 'commands' -ex 'silent' \
+             -ex 'printf "[gdb] E68EF0+6724 pre-node ebx=%#x esi=%#x edi=%#x ebp=%#x\\n", (unsigned int)g_ebx, (unsigned int)g_esi, (unsigned int)g_edi, (unsigned int)g_ebp' \
+             -ex 'p/x *(unsigned int*)((unsigned int)g_ebx+0x4c)' \
+             -ex 'x/8wx (unsigned int)g_ebx' \
+             -ex 'continue' -ex 'end' \
+             -ex run -ex 'thread apply all bt 32' -ex 'thread 1' \
             -ex 'p/x (unsigned int)g_cur_func' -ex 'p/x (unsigned int)g_eax' \
             -ex 'p/x (unsigned int)g_ecx' -ex 'p/x (unsigned int)g_edx' \
             -ex 'p/x (unsigned int)g_ebx' -ex 'p/x (unsigned int)g_esp' \
