@@ -86,14 +86,11 @@ jobs:
             -ex 'x/4wx 0x50421330' \
             -ex 'x/4wx 0x50421050' \
             -ex 'info line *$pc' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x34)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x3c)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x40)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x44)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_esp+0x48)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax+0x34)' \
-            -ex 'p/x (unsigned int)dd_mem32((unsigned int)g_eax+0x38)' \
+            -ex 'p/d (int)g_fp_top' \
+            -ex 'p/f g_st[0]' -ex 'p/f g_st[1]' -ex 'p/f g_st[2]' \
+            -ex 'p/f g_st[3]' -ex 'p/f g_st[4]' -ex 'p/f g_st[5]' \
+            -ex 'x/32wx (unsigned long)g_esi' \
+            -ex 'x/32wx 0x5149a360' \
             -ex 'x/24wx ((unsigned int)g_esp - 0x20)' \
             -ex 'p/x *(unsigned int*)0x126fd98' \
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
