@@ -66,6 +66,9 @@ jobs:
             -ex 'p/x (unsigned int)g_ebx' -ex 'p/x (unsigned int)g_esp' \
             -ex 'p/x (unsigned int)g_ebp' -ex 'p/x (unsigned int)g_esi' \
             -ex 'p/x (unsigned int)g_edi' -ex 'p/x (unsigned int)g_icall_count' \
+            -ex 'p/x (unsigned int)g_fs_base' \
+            -ex 'x/4wx (unsigned long)g_fs_base+0x2c' \
+            -ex 'p/x *(unsigned int*)0x126fd98' \
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
             -ex 'x/30i $pc-48' -ex 'bt 24' \
             --args ./build/DesertDroid "$GITHUB_WORKSPACE/FalloutNV.exe" 2>&1 |
