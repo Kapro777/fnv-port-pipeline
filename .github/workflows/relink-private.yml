@@ -68,6 +68,8 @@ jobs:
             -ex 'p/x (unsigned int)g_edi' -ex 'p/x (unsigned int)g_icall_count' \
             -ex 'p/x (unsigned int)g_fs_base' \
             -ex 'x/4wx (unsigned long)g_fs_base+0x2c' \
+            -ex 'x/4wx 0x50421330' \
+            -ex 'x/4wx 0x50421050' \
             -ex 'p/x *(unsigned int*)0x126fd98' \
             -ex 'p/x (unsigned int)g_backedges' -ex 'info registers' \
             -ex 'x/30i $pc-48' -ex 'bt 24' \
