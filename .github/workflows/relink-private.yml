@@ -75,12 +75,7 @@ jobs:
             -ex 'set confirm off' \
              -ex 'handle SIGSEGV stop print nopass' \
              -ex "source $GITHUB_WORKSPACE/tooling/tools/gdb_deadline.py" \
-             -ex 'break *sub_00E68EF0+6699' \
-             -ex 'commands 1' -ex 'silent' \
-             -ex 'printf "[gdb] E68EF0+6699 predecessor ebx=%#x r11=%#x esi=%#x edi=%#x ebp=%#x\\n", (unsigned int)g_ebx, (unsigned int)$r11, (unsigned int)g_esi, (unsigned int)g_edi, (unsigned int)g_ebp' \
-             -ex 'x/8wx (unsigned long)$r11' \
-             -ex 'p/x *(unsigned int*)((unsigned long)$r11+0x4c)' \
-             -ex 'continue' -ex 'end' \
+             -ex "source $GITHUB_WORKSPACE/.github/gdb_capture.py" \
              -ex run -ex 'thread apply all bt 32' -ex 'thread 1' \
             -ex 'p/x (unsigned int)g_cur_func' -ex 'p/x (unsigned int)g_eax' \
             -ex 'p/x (unsigned int)g_ecx' -ex 'p/x (unsigned int)g_edx' \
